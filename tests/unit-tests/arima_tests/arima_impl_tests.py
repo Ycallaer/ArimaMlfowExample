@@ -10,14 +10,10 @@ class TestArimaImpl(unittest.TestCase):
         self.filename="sarimax"
         self.version="0.0.0.1.test"
 
-
-    def tearDown(self):
-        print("teardown")
-
-    def test_Arima_imple_paraMs(self):
-        arima_model=ARIMA(q=0,d=0,p=0,trend='c',method=None,start_params=None)
-
-        assert arima_model.p == 0
+    # def test_Arima_imple_paraMs(self):
+    #     arima_model=ARIMA(q=0,d=0,p=0,trend='c',method=None,start_params=None)
+    #
+    #     assert arima_model.p == 0
 
     def test_train(self):
         pd_data=pandas.read_csv('tests/files/international-airline-passengers.csv', sep=';', error_bad_lines=False, header=0)

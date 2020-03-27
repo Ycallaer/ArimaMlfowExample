@@ -12,6 +12,10 @@ from statsmodels.tsa.statespace.sarimax import SARIMAXResults
 from mlflow import log_metric, log_param, log_artifact, sklearn
 import mlflow
 
+import uuid
+
+from verta import Client
+import verta
 
 class ARIMA():
     """
@@ -39,6 +43,7 @@ class ARIMA():
         self.param_season = []
         self.AIC = []
         self.sarimax_model = []
+        self.run=None
 
         self.__init_plot()
 
@@ -73,7 +78,9 @@ class ARIMA():
         :param results: MLEResults ( the result of calling the fit function on SARIMAX)
         :return: None
         """
-        mlflow.sklearn.log_model(results,"sarmiax")
+        #mlflow.sklearn.log_model(results,"sarmiax")
+        self.run.log_model(results)
+
 
 
 
@@ -86,6 +93,7 @@ class ARIMA():
         :return: unpickled instance of the SARIMAX model
         """
         return SARIMAXResults.load(self.__generate_pkl_filename(path, filename, version))
+        mlflow.sklearn.load_model()
 
     def fit(self, train_data):
         """
@@ -93,28 +101,52 @@ class ARIMA():
         :param train_data: Panda dataseries
         :return: Nothing
         """
-        mlflow.tracking.set_tracking_uri("http://localhost:5000/")
-        experiment_id=mlflow.create_experiment("DemoArimax10")
-        with mlflow.start_run(experiment_id=experiment_id):
-            number_iterations=0
-            logging.info("Generate the parameter grid")
-            self.pdq_list = self.__pdq_iterations()
-            for param in self.pdq_list:
-                for param_season in self.__seasonal_pdq():
-                    try:
-                        mlflow.log_param("seasonal_pdq", param_season)
-                        number_iterations=number_iterations+1
-                        log_metric("fit_iterations",number_iterations)
-                        results = self.train(train_data=train_data, param=param, param_season=param_season)
-                        logging.info("Training success")
-                        self.AIC.append(results.aic)
-                        self.sarimax_model.append([param, param_season])
+        #mlflow.tracking.set_tracking_uri("http://yves-alb-dev-767301589.eu-central-1.elb.amazonaws.com/")
+        #mlflow.tracking.set_tracking_uri("http://localhost:5000/")
+        client = Client("http://localhost:3000")
+        proj = client.set_project("My first ARIMA ModelDB project")
+        expt = client.set_experiment("YYC Experiment 3 Save model")
+        run = client.set_experiment_run("First Run")
 
-                        mlflow.log_metric("aic",results.aic)
-                    except ArimaException:
-                        logging.error("A fatal issue occurred during the training")
 
-        mlflow.end_run()
+        self.run = run
+        number_iterations=0
+        logging.info("Generate the parameter grid")
+        self.pdq_list = self.__pdq_iterations()
+
+        run.log_dataset("train_data", train_data, overwrite=True)
+
+        fit_iterations=[]
+        aic_results=[]
+        for param in self.pdq_list:
+            for param_season in self.__seasonal_pdq():
+                try:
+                    number_iterations = number_iterations + 1
+                    print("the param season {}".format(str(param_season)))
+                    #tuples are not supported
+                    #run.log_hyperparameters({"seasonal_pdq1_"+str(number_iterations) : param_season[0]})
+                    #run.log_hyperparameters({"seasonal_pdq2_" + str(number_iterations): param_season[1]})
+                    #run.log_hyperparameters({"seasonal_pdq3_" + str(number_iterations): param_season[2]})
+                    #run.log_hyperparameters({"seasonal_pdq4_" + str(number_iterations): param_season[3]})
+
+                    fit_iterations.append(number_iterations)
+
+                    results = self.train(train_data=train_data, param=param, param_season=param_season)
+                    logging.info("Training success")
+                    self.AIC.append(results.aic)
+                    self.sarimax_model.append([param, param_season])
+                    run.log_observation("aic",results.aic)
+                    #run.log_metric("aic_"+str(number_iterations),results.aic)
+                    aic_results.append(results.aic)
+                except ArimaException:
+                    logging.error("A fatal issue occurred during the training")
+        #Because of the boolean value in the proto function only attributes support key - list combo
+        #run.log_metric("aic",aic_results)
+        #run.log_metric("fit_iterations",fit_iterations)
+        run.log_attribute("aic",aic_results)
+        run.log_attribute("fit_iterations", fit_iterations)
+        run.log_observation()
+        #mlflow.end_run()
 
 
     def plot_arima_results(self,results):
